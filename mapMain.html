@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta
+      name="viewport"
+      content="initial-scale=1.0, user-scalable=no, width=device-width"
+    />
+    <title>点聚合</title>
+    <link
+      rel="stylesheet"
+      href="https://a.amap.com/jsapi_demos/static/demo-center/css/demo-center.css"
+    />
+    <style>
+      html,
+      body,
+      #container {
+        height: 100%;
+        width: 100%;
+      }
+
+      .input-card {
+        width: 25rem;
+      }
+
+      .input-card .btn {
+        width: 7rem;
+        margin-right: 0.7rem;
+      }
+
+      .input-card .btn:last-child {
+        margin-right: 0;
+      }
+
+      /* 添加聚合点样式类 */
+      .cluster-marker {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        text-align: center;
+        box-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+        transition: all 0.3s ease;
+      }
+
+      .normal-marker {
+        width: 0;
+        height: 0;
+        border-left: 8px solid transparent;
+        border-right: 8px solid transparent;
+        border-top: 10px solid black;
+      }
+
+      .normalBox {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: max-content;
+        z-index: 99999;
+      }
+
+      .content {
+        font-size: 14px;
+        color: #eee;
+        background: #7e7e7e;
+        padding: 6px;
+        border-radius: 4px;
+      }
+
+      .unit {
+        display: flex;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="container" class="map" tabindex="0"></div>
+
+    <script src="https://webapi.amap.com/maps?v=2.0&key=9602b16cb82ce82d7958abc70866169b&plugin=AMap.MarkerCluster"></script>
+
+    <script type="text/javascript">
+      var cluster;
+
+      var map = new AMap.Map("container", {
+        center: [104.937478, 35.439575],
+        zoom: 5,
+      });
+
+      var gridSize = 60;
+      let points = [];
+      var count = points.length;
+
+      function callApi() {
+        return new Promise(async (res, rej) => {
+          try {
+            const response = await fetch(
+              "http://z567c8c8.natappfree.cc/qsrq/api/residentmanage/getUserAndSaleman"
+            );
+            if (!response.ok) {
+              rej("Network response was not ok " + response.statusText);
+            }
+            const data = await response.json(); // 解析JSON数据
+            res(data);
+          } catch (error) {
+            rej("Fetch error:", error);
+          }
+        });
+      }
+
+      function _renderClusterMarker(context) {
+        const count = context.count;
+        const factor = Math.pow(count / points.length, 1 / 18);
+        const hue = 180 - factor * 180;
+
+        const div = document.createElement("div");
+        div.className = "cluster-marker";
+
+        // 设置计算后的样式
+        div.style.backgroundColor = `hsla(${hue}, 100%, 40%, 0.7)`;
+        div.style.color = `hsla(${hue}, 100%, 90%, 1)`;
+        div.style.borderColor = `hsla(${hue}, 100%, 40%, 1)`;
+        div.style.boxShadow = `0 0 5px hsla(${hue}, 100%, 90%, 1)`;
+
+        const size = Math.round(
+          30 + Math.pow(count / points.length, 1 / 5) * 20
+        );
+        div.style.width = div.style.height = `${size}px`;
+        div.style.border = `solid 1px hsla(${hue}, 100%, 40%, 1)`;
+        div.style.borderRadius = `${size / 2}px`;
+        div.style.lineHeight = `${size}px`;
+        div.style.fontSize = "14px";
+
+        div.textContent = count;
+
+        // 设置标记偏移量
+        context.marker.setOffset(new AMap.Pixel(-size / 2, -size / 2));
+        context.marker.setContent(div);
+      }
+      // 自定义非聚合点渲染函数
+      function _renderMarker(context) {
+        console.log(context);
+        var content = `
+                <div class="normalBox">
+                  <div class="content">
+                    <div class="unit">商户名称:${context.data[0].merchantName}</div>
+                    <div class="unit">地址:${context.data[0].address}</div>
+                    <div class="unit">负责人:${context.data[0].rName}</div>
+                    <div class="unit">客户手机号:${context.data[0].phonenumber}</div>
+                    <div class="unit">配送员姓名:${context.data[0].openId}</div>
+                    <div class="unit">配送员手机号:${context.data[0].avatar}</div>
+                    <div class="unit">车牌号:${context.data[0].qrcode}</div>
+                  </div>
+                  <div class="normal-marker"></div>
+                </div>
+                `;
+
+        context.marker.setContent(content);
+        context.marker.setOffset(new AMap.Pixel(-9, -169));
+      }
+
+      // 初始化地图
+      async function initMap() {
+        // 创建地图实例
+        map = new AMap.Map("container", {
+          center: [104.937478, 35.439575],
+          zoom: 5,
+        });
+
+        // 等待地图加载完成
+        await new Promise((resolve) => map.on("complete", resolve));
+
+        // 获取数据
+        const data = await callApi();
+
+        // 处理数据并添加到点集合
+        if (data && data.data && data.data.length) {
+          data.data.forEach((item) => {
+            // 注意：这里假设countyName和cityName是经纬度值，如果不是需要调整
+            points.push({
+              lnglat: [item.countyName, item.cityName],
+              merchantName: item.merchantName,
+              address: item.address,
+              rName: item.rName,
+              phonenumber: item.phonenumber,
+              openId: item.openId,
+              avatar: item.avatar,
+              qrcode: item.qrcode,
+            });
+          });
+        }
+
+        addCluster(2);
+      }
+
+      function addCluster(tag) {
+        if (cluster) {
+          cluster.setMap(null);
+        }
+        if (tag == 2) {
+          //完全自定义
+          cluster = new AMap.MarkerCluster(map, points, {
+            gridSize: gridSize, // 设置网格像素大小
+            renderClusterMarker: _renderClusterMarker, // 自定义聚合点样式
+            renderMarker: _renderMarker, // 自定义非聚合点样式
+          });
+        }
+      }
+
+      window.onload = initMap;
+    </script>
+  </body>
+</html>
